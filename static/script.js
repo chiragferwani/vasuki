@@ -156,6 +156,7 @@ async function sendMessage() {
             buffer = lines.pop() || '';
 
             for (const line of lines) {
+                if (line.startsWith(':')) continue; // Ignore SSE heartbeats
                 if (line.startsWith('data: ')) {
                     const payload = line.slice(6);
                     if (payload.startsWith('[SESSION:') && payload.endsWith(']')) {

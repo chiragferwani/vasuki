@@ -122,7 +122,11 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """Handle a chat message and stream Vasuki's response tokens in real time."""
+    """Handle a chat message and stream Vasuki's response tokens in real time without blocking the asyncio event loop."""
+    import asyncio
+    import queue
+    import threading
+
     session_id = request.session_id or str(uuid.uuid4())
     user_message = request.message.strip()
 
@@ -138,17 +142,45 @@ async def chat_stream(request: ChatRequest):
     context_passages = [f"[{doc['title']}]\n{doc['content']}" for doc in results]
     history = conversations[session_id][-(MAX_CONVERSATION_TURNS * 2):]
 
+    token_queue = queue.Queue()
+    DONE_SENTINEL = object()
+
+    def run_inference():
+        try:
+            for token in vasuki_llm.generate_stream(
+                user_message=user_message,
+                context_passages=context_passages,
+                conversation_history=history,
+            ):
+                token_queue.put(token)
+        except Exception as e:
+            logger.exception("Error during threaded LLM stream")
+            token_queue.put("The ancient coils grow heavy... Try again, mortal.")
+        finally:
+            token_queue.put(DONE_SENTINEL)
+
+    # Launch LLM generation in background thread so asyncio event loop stays 100% free for health checks
+    threading.Thread(target=run_inference, daemon=True).start()
+
     async def event_generator():
         full_text = []
-        for token in vasuki_llm.generate_stream(
-            user_message=user_message,
-            context_passages=context_passages,
-            conversation_history=history,
-        ):
-            full_text.append(token)
-            # Encode newlines for SSE
-            token_escaped = token.replace("\n", "\\n")
-            yield f"data: {token_escaped}\n\n"
+        last_heartbeat = asyncio.get_event_loop().time()
+
+        while True:
+            try:
+                item = token_queue.get_nowait()
+                if item is DONE_SENTINEL:
+                    break
+                full_text.append(item)
+                token_escaped = item.replace("\n", "\\n")
+                yield f"data: {token_escaped}\n\n"
+                last_heartbeat = asyncio.get_event_loop().time()
+            except queue.Empty:
+                now = asyncio.get_event_loop().time()
+                if now - last_heartbeat > 2.0:
+                    yield ": heartbeat\n\n"
+                    last_heartbeat = now
+                await asyncio.sleep(0.02)
 
         assistant_msg = "".join(full_text).strip()
         conversations[session_id].append({"role": "user", "content": user_message})
