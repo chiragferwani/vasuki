@@ -146,6 +146,7 @@ async def chat_stream(request: ChatRequest):
     DONE_SENTINEL = object()
 
     def run_inference():
+        count = 0
         try:
             for token in vasuki_llm.generate_stream(
                 user_message=user_message,
@@ -153,6 +154,9 @@ async def chat_stream(request: ChatRequest):
                 conversation_history=history,
             ):
                 token_queue.put(token)
+                count += 1
+            if count == 0:
+                token_queue.put("Vasuki remains silent... Speak again, mortal.")
         except Exception as e:
             logger.exception("Error during threaded LLM stream")
             token_queue.put("The ancient coils grow heavy... Try again, mortal.")

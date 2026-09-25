@@ -102,16 +102,14 @@ function hideTyping() {
 // --- Send message ---
 async function sendMessage() {
     const message = userInput.value.trim();
-    if (!message || isWaiting) return;
+    if (!message) return;
 
     // Add user message
     addMessage(message, true);
     userInput.value = '';
     userInput.style.height = '22px';
 
-    // Disable input
-    isWaiting = true;
-    sendBtn.disabled = true;
+    // Show typing indicator while waiting for model prefill
     showTyping();
 
     try {
@@ -128,24 +126,11 @@ async function sendMessage() {
             throw new Error(`HTTP ${response.status}`);
         }
 
-        hideTyping();
-
-        // Create empty Vasuki message container for real-time text streaming
-        const msgDiv = document.createElement('div');
-        msgDiv.className = 'message vasuki-message';
-        msgDiv.innerHTML = `
-            <img src="/static/logo.jpeg" alt="Vasuki" class="message-avatar">
-            <div class="message-content">
-                <div class="message-name">Vasuki</div>
-                <p></p>
-            </div>
-        `;
-        chatArea.appendChild(msgDiv);
-        const pElem = msgDiv.querySelector('p');
-
         const reader = response.body.getReader();
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
+        let msgDiv = null;
+        let pElem = null;
 
         while (true) {
             const { value, done } = await reader.read();
@@ -164,6 +149,24 @@ async function sendMessage() {
                         localStorage.setItem('vasuki_session', sessionId);
                     } else {
                         const token = payload.replace(/\\n/g, '\n');
+                        if (!token) continue;
+
+                        // Create Vasuki message card ONLY when the first token arrives
+                        if (!msgDiv) {
+                            hideTyping();
+                            msgDiv = document.createElement('div');
+                            msgDiv.className = 'message vasuki-message';
+                            msgDiv.innerHTML = `
+                                <img src="/static/logo.jpeg" alt="Vasuki" class="message-avatar">
+                                <div class="message-content">
+                                    <div class="message-name">Vasuki</div>
+                                    <p></p>
+                                </div>
+                            `;
+                            chatArea.appendChild(msgDiv);
+                            pElem = msgDiv.querySelector('p');
+                        }
+
                         pElem.textContent += token;
                         scrollToBottom();
                     }
@@ -171,12 +174,18 @@ async function sendMessage() {
             }
         }
 
+        if (!msgDiv) {
+            hideTyping();
+            addMessage("Vasuki remains silent... Speak again, mortal.");
+        } else if (!pElem.textContent.trim()) {
+            pElem.textContent = "Vasuki remains silent... Speak again, mortal.";
+        }
+
     } catch (error) {
         hideTyping();
         addMessage('The serpent stirs uneasily... Something went wrong. Try again, mortal.');
         console.error('Chat error:', error);
     } finally {
-        isWaiting = false;
         sendBtn.disabled = false;
         userInput.focus();
     }
