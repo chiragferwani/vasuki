@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy and install Python dependencies
+# Disable -march=native so the binary works on any x86_64 CPU (Render free tier lacks AVX2)
 COPY requirements.txt .
+ENV CMAKE_ARGS="-DGGML_NATIVE=OFF"
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download the GGUF model at build time (cached in Docker layer)
