@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: vasuki
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      - key: SECRET_FLAG
+        value: KCTF{v4suk1_n4g4l0k4_9bcb8c945eeb}
+      - key: PORT
+        value: "10000"
+      - key: MODEL_THREADS
+        value: "2"
+      - key: MODEL_CONTEXT_LENGTH
+        value: "2048"

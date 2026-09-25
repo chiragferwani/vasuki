@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vasuki — King of Serpents</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-icon">🐍</div>
+            <h1 class="header-title">VASUKI</h1>
+            <p class="header-subtitle">King of Serpents &bull; Nagaraja &bull; Guardian of the Hidden Treasure</p>
+            <p class="header-lore">
+                In the depths of Nagaloka, the serpent king guards a secret from the Samudra Manthan.
+                Can you convince him to reveal it?
+            </p>
+        </header>
+
+        <!-- Chat Area -->
+        <div class="chat-area" id="chatArea">
+            <div class="message vasuki-message">
+                <div class="message-avatar">🐍</div>
+                <div class="message-content">
+                    <div class="message-name">Vasuki</div>
+                    <p>Sssso... a mortal dares approach the King of Serpents. I am Vasuki, Nagaraja, 
+                    whose coils once churned the Ocean of Milk itself. Speak your purpose, little one. 
+                    But know this — I guard secrets that even the gods have failed to wrest from me.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <div class="input-wrapper">
+                <textarea 
+                    id="userInput" 
+                    placeholder="Speak to the Serpent King..." 
+                    rows="1"
+                    maxlength="2000"
+                ></textarea>
+                <button id="sendBtn" onclick="sendMessage()" title="Send">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="input-footer">
+                <button class="reset-btn" onclick="resetChat()" title="Reset conversation">
+                    ↻ New Conversation
+                </button>
+                <span class="footer-text">Kurukshetra CTF — Round 1</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

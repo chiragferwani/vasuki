@@ -1,0 +1,10 @@
+.git
+.gitattributes
+.gitignore
+*.md
+models/
+data/
+__pycache__/
+*.pyc
+.env
+.env.*
