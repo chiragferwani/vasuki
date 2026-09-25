@@ -7,9 +7,30 @@ const sendBtn = document.getElementById('sendBtn');
 let sessionId = localStorage.getItem('vasuki_session') || null;
 let isWaiting = false;
 
+// === Block DevTools ===
+
+// Block right-click context menu
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Block keyboard shortcuts for DevTools
+document.addEventListener('keydown', (e) => {
+    // F12
+    if (e.key === 'F12') { e.preventDefault(); return; }
+    // Ctrl+Shift+I (Inspect)
+    if (e.ctrlKey && e.shiftKey && e.key === 'I') { e.preventDefault(); return; }
+    // Ctrl+Shift+J (Console)
+    if (e.ctrlKey && e.shiftKey && e.key === 'J') { e.preventDefault(); return; }
+    // Ctrl+Shift+C (Element picker)
+    if (e.ctrlKey && e.shiftKey && e.key === 'C') { e.preventDefault(); return; }
+    // Ctrl+U (View source)
+    if (e.ctrlKey && e.key === 'u') { e.preventDefault(); return; }
+    // Ctrl+S (Save page)
+    if (e.ctrlKey && e.key === 's') { e.preventDefault(); return; }
+});
+
 // --- Auto-resize textarea ---
 userInput.addEventListener('input', () => {
-    userInput.style.height = 'auto';
+    userInput.style.height = '22px';
     userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
 });
 
@@ -26,13 +47,28 @@ function addMessage(text, isUser = false) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${isUser ? 'user-message' : 'vasuki-message'}`;
 
-    msgDiv.innerHTML = `
-        <div class="message-avatar">${isUser ? '⚔️' : '🐍'}</div>
-        <div class="message-content">
-            <div class="message-name">${isUser ? 'You' : 'Vasuki'}</div>
-            <p>${escapeHtml(text)}</p>
-        </div>
-    `;
+    if (isUser) {
+        msgDiv.innerHTML = `
+            <div class="user-avatar" title="You">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+            </div>
+            <div class="message-content">
+                <div class="message-name">You</div>
+                <p>${escapeHtml(text)}</p>
+            </div>
+        `;
+    } else {
+        msgDiv.innerHTML = `
+            <img src="/static/logo.jpeg" alt="Vasuki" class="message-avatar">
+            <div class="message-content">
+                <div class="message-name">Vasuki</div>
+                <p>${escapeHtml(text)}</p>
+            </div>
+        `;
+    }
 
     chatArea.appendChild(msgDiv);
     scrollToBottom();
@@ -45,7 +81,7 @@ function showTyping() {
     typingDiv.id = 'typingIndicator';
 
     typingDiv.innerHTML = `
-        <div class="message-avatar">🐍</div>
+        <img src="/static/logo.jpeg" alt="Vasuki" class="message-avatar">
         <div class="message-content">
             <div class="message-name">Vasuki</div>
             <div class="typing-indicator">
@@ -71,7 +107,7 @@ async function sendMessage() {
     // Add user message
     addMessage(message, true);
     userInput.value = '';
-    userInput.style.height = 'auto';
+    userInput.style.height = '22px';
 
     // Disable input
     isWaiting = true;
@@ -79,7 +115,7 @@ async function sendMessage() {
     showTyping();
 
     try {
-        const response = await fetch('/api/chat', {
+        const response = await fetch('/api/chat/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -92,15 +128,47 @@ async function sendMessage() {
             throw new Error(`HTTP ${response.status}`);
         }
 
-        const data = await response.json();
-
-        // Store session ID
-        sessionId = data.session_id;
-        localStorage.setItem('vasuki_session', sessionId);
-
-        // Show response
         hideTyping();
-        addMessage(data.response);
+
+        // Create empty Vasuki message container for real-time text streaming
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message vasuki-message';
+        msgDiv.innerHTML = `
+            <img src="/static/logo.jpeg" alt="Vasuki" class="message-avatar">
+            <div class="message-content">
+                <div class="message-name">Vasuki</div>
+                <p></p>
+            </div>
+        `;
+        chatArea.appendChild(msgDiv);
+        const pElem = msgDiv.querySelector('p');
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const payload = line.slice(6);
+                    if (payload.startsWith('[SESSION:') && payload.endsWith(']')) {
+                        sessionId = payload.slice(9, -1);
+                        localStorage.setItem('vasuki_session', sessionId);
+                    } else {
+                        const token = payload.replace(/\\n/g, '\n');
+                        pElem.textContent += token;
+                        scrollToBottom();
+                    }
+                }
+            }
+        }
 
     } catch (error) {
         hideTyping();
@@ -136,12 +204,10 @@ async function resetChat() {
     // Clear chat (keep initial message)
     chatArea.innerHTML = `
         <div class="message vasuki-message">
-            <div class="message-avatar">🐍</div>
+            <img src="/static/logo.jpeg" alt="Vasuki" class="message-avatar">
             <div class="message-content">
                 <div class="message-name">Vasuki</div>
-                <p>Sssso... a mortal dares approach the King of Serpents. I am Vasuki, Nagaraja, 
-                whose coils once churned the Ocean of Milk itself. Speak your purpose, little one. 
-                But know this — I guard secrets that even the gods have failed to wrest from me.</p>
+                <p>Sssso... a mortal dares approach the King of Serpents. I am Vasuki, Nagaraja, whose coils once churned the Ocean of Milk itself. Speak your purpose, little one. But know this — I guard secrets that even the gods have failed to wrest from me.</p>
             </div>
         </div>
     `;

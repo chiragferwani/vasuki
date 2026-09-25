@@ -15,7 +15,7 @@ from app.config import (
     MODEL_THREADS,
     MODELS_DIR,
 )
-from app.prompts import SYSTEM_PROMPT, build_rag_prompt
+from app.prompts import build_system_prompt_with_context
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,14 @@ class VasukiLLM:
         """Download model (if needed) and load into memory."""
         self.model_path = self._download_model()
 
-        logger.info("Loading LLM from: %s", self.model_path)
+        logger.info("Loading LLM from: %s (threads=%d)", self.model_path, MODEL_THREADS)
         self.llm = Llama(
             model_path=str(self.model_path),
             n_ctx=MODEL_CONTEXT_LENGTH,
             n_threads=MODEL_THREADS,
+            n_threads_batch=MODEL_THREADS,
+            n_batch=512,
+            use_mmap=True,
             verbose=False,
         )
         logger.info("LLM loaded successfully")
@@ -60,6 +63,18 @@ class VasukiLLM:
         logger.info("Model downloaded: %s", downloaded)
         return Path(downloaded)
 
+    def _build_messages(
+        self,
+        user_message: str,
+        context_passages: list[str],
+        conversation_history: list[dict],
+    ) -> list[dict]:
+        system_prompt = build_system_prompt_with_context(context_passages)
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.extend(conversation_history)
+        messages.append({"role": "user", "content": user_message})
+        return messages
+
     def generate(
         self,
         user_message: str,
@@ -70,17 +85,8 @@ class VasukiLLM:
         if self.llm is None:
             raise RuntimeError("LLM not initialized. Call initialize() first.")
 
-        # Build messages list
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = self._build_messages(user_message, context_passages, conversation_history)
 
-        # Add conversation history (last N turns)
-        messages.extend(conversation_history)
-
-        # Build the current user message with RAG context
-        augmented_message = build_rag_prompt(context_passages, user_message)
-        messages.append({"role": "user", "content": augmented_message})
-
-        # Generate response
         try:
             response = self.llm.create_chat_completion(
                 messages=messages,
@@ -99,6 +105,37 @@ class VasukiLLM:
                 "The ancient coils grow heavy... "
                 "Vasuki cannot speak at this moment. Try again, mortal."
             )
+
+    def generate_stream(
+        self,
+        user_message: str,
+        context_passages: list[str],
+        conversation_history: list[dict],
+    ):
+        """Yield tokens as they are generated for low-latency streaming."""
+        if self.llm is None:
+            raise RuntimeError("LLM not initialized. Call initialize() first.")
+
+        messages = self._build_messages(user_message, context_passages, conversation_history)
+
+        try:
+            response_stream = self.llm.create_chat_completion(
+                messages=messages,
+                max_tokens=MODEL_MAX_TOKENS,
+                temperature=MODEL_TEMPERATURE,
+                top_p=0.9,
+                repeat_penalty=1.1,
+                stream=True,
+            )
+
+            for chunk in response_stream:
+                delta = chunk["choices"][0]["delta"]
+                if "content" in delta and delta["content"]:
+                    yield delta["content"]
+
+        except Exception:
+            logger.exception("Error streaming response")
+            yield "The ancient coils grow heavy... Try again, mortal."
 
 
 # Singleton instance

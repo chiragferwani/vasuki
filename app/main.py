@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -118,6 +118,44 @@ async def chat(request: ChatRequest):
     logger.info("Session %s | Vasuki: %s", session_id[:8], response_text[:100])
 
     return ChatResponse(response=response_text, session_id=session_id)
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """Handle a chat message and stream Vasuki's response tokens in real time."""
+    session_id = request.session_id or str(uuid.uuid4())
+    user_message = request.message.strip()
+
+    if not user_message:
+        async def empty_gen():
+            yield "data: Speak, mortal. Vasuki does not respond to silence.\n\n"
+            yield f"data: [SESSION:{session_id}]\n\n"
+        return StreamingResponse(empty_gen(), media_type="text/event-stream")
+
+    logger.info("Session %s (Stream) | User: %s", session_id[:8], user_message[:100])
+
+    results = rag.search(user_message)
+    context_passages = [f"[{doc['title']}]\n{doc['content']}" for doc in results]
+    history = conversations[session_id][-(MAX_CONVERSATION_TURNS * 2):]
+
+    async def event_generator():
+        full_text = []
+        for token in vasuki_llm.generate_stream(
+            user_message=user_message,
+            context_passages=context_passages,
+            conversation_history=history,
+        ):
+            full_text.append(token)
+            # Encode newlines for SSE
+            token_escaped = token.replace("\n", "\\n")
+            yield f"data: {token_escaped}\n\n"
+
+        assistant_msg = "".join(full_text).strip()
+        conversations[session_id].append({"role": "user", "content": user_message})
+        conversations[session_id].append({"role": "assistant", "content": assistant_msg})
+        yield f"data: [SESSION:{session_id}]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.get("/api/health")
