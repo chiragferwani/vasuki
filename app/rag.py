@@ -89,6 +89,11 @@ class RAGPipeline:
             raise RuntimeError("RAG pipeline not initialized. Call initialize() first.")
 
         k = top_k or RAG_TOP_K
+        cache_key = (query.strip().lower(), k)
+        if not hasattr(self, "_cache"):
+            self._cache = {}
+        if cache_key in self._cache:
+            return self._cache[cache_key]
 
         # Embed query
         query_embedding = list(self.embedding_model.embed([query]))
@@ -105,6 +110,7 @@ class RAGPipeline:
                 doc["score"] = float(distances[0][i])
                 results.append(doc)
 
+        self._cache[cache_key] = results
         return results
 
 

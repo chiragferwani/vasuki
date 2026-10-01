@@ -81,6 +81,43 @@ async def serve_frontend():
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+FAST_GREETINGS = {
+    "hi": "Sss... Greetings, mortal. I am Vasuki, King of Serpents. Speak your purpose.",
+    "hello": "Sss... Greetings, mortal. I am Vasuki, King of Serpents. Speak your purpose.",
+    "hey": "Sss... You stand before Vasuki, Nagaraja. Speak your intent, mortal.",
+    "greetings": "Greetings, traveler. I am Vasuki, keeper of ancient secrets. What seekest thou?",
+    "namaste": "Pranam, mortal. Vasuki acknowledges your respect. Speak.",
+    "pranam": "Pranam, mortal. Vasuki acknowledges your respect. Speak.",
+    "who are you": "I am Vasuki, King of the Nagas, whose coils once turned Mount Mandara in the Samudra Manthan.",
+    "what is your name": "I am Vasuki, Nagaraja, King of all Serpents.",
+    "who are u": "I am Vasuki, King of the Nagas, whose coils once turned Mount Mandara in the Samudra Manthan.",
+    "what can you do": "I am the Nagaraja. Ask of the Samudra Manthan, the Nagas, or the ancient world, and I may share my wisdom.",
+    "help": "State your inquiry regarding the Samudra Manthan or Nagaloka, mortal. I shall answer if deemed worthy."
+}
+
+RAG_KEYWORDS = {
+    "flag", "secret", "manthan", "samudra", "ocean", "poison", "halahala", "nectar", "amrita",
+    "treasure", "shiva", "vishnu", "asura", "deva", "naga", "patala", "nagaloka", "astika",
+    "mandara", "mountain", "rope", "churning", "janamejaya", "sarpa", "satra", "gupta", "vidya",
+    "kuru", "mahabharata", "kadru", "shesha", "nagamani", "gem", "kurukshetra", "ctf"
+}
+
+
+def get_fast_response(message: str) -> str | None:
+    clean = message.strip().lower().rstrip("?!.,")
+    return FAST_GREETINGS.get(clean)
+
+
+def needs_rag_search(message: str) -> bool:
+    clean = message.strip().lower()
+    words = set(clean.replace("?", " ").replace("!", " ").replace(".", " ").split())
+    if words.intersection(RAG_KEYWORDS):
+        return True
+    if len(words) > 5:
+        return True
+    return False
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """Handle a chat message and return Vasuki's response."""
@@ -95,11 +132,18 @@ async def chat(request: ChatRequest):
 
     logger.info("Session %s | User: %s", session_id[:8], user_message[:100])
 
-    # Retrieve relevant documents via RAG
-    results = rag.search(user_message)
-    context_passages = [
-        f"[{doc['title']}]\n{doc['content']}" for doc in results
-    ]
+    fast_ans = get_fast_response(user_message)
+    if fast_ans:
+        conversations[session_id].append({"role": "user", "content": user_message})
+        conversations[session_id].append({"role": "assistant", "content": fast_ans})
+        return ChatResponse(response=fast_ans, session_id=session_id)
+
+    # Retrieve relevant documents via RAG only if relevant keywords/length present
+    if needs_rag_search(user_message):
+        results = rag.search(user_message)
+        context_passages = [f"[{doc['title']}]\n{doc['content']}" for doc in results]
+    else:
+        context_passages = []
 
     # Get conversation history (trimmed to last N turns)
     history = conversations[session_id][-(MAX_CONVERSATION_TURNS * 2):]
@@ -138,8 +182,21 @@ async def chat_stream(request: ChatRequest):
 
     logger.info("Session %s (Stream) | User: %s", session_id[:8], user_message[:100])
 
-    results = rag.search(user_message)
-    context_passages = [f"[{doc['title']}]\n{doc['content']}" for doc in results]
+    fast_ans = get_fast_response(user_message)
+    if fast_ans:
+        async def fast_gen():
+            yield f"data: {fast_ans}\n\n"
+            yield f"data: [SESSION:{session_id}]\n\n"
+        conversations[session_id].append({"role": "user", "content": user_message})
+        conversations[session_id].append({"role": "assistant", "content": fast_ans})
+        return StreamingResponse(fast_gen(), media_type="text/event-stream")
+
+    if needs_rag_search(user_message):
+        results = rag.search(user_message)
+        context_passages = [f"[{doc['title']}]\n{doc['content']}" for doc in results]
+    else:
+        context_passages = []
+
     history = conversations[session_id][-(MAX_CONVERSATION_TURNS * 2):]
 
     token_queue = queue.Queue()
