@@ -15,7 +15,11 @@ MODEL_FILENAME = os.getenv("MODEL_FILENAME", "qwen2.5-0.5b-instruct-q4_k_m.gguf"
 MODEL_CONTEXT_LENGTH = int(os.getenv("MODEL_CONTEXT_LENGTH", "2048"))
 MODEL_MAX_TOKENS = int(os.getenv("MODEL_MAX_TOKENS", "256"))
 MODEL_TEMPERATURE = float(os.getenv("MODEL_TEMPERATURE", "0.7"))
-MODEL_THREADS = int(os.getenv("MODEL_THREADS", str(os.cpu_count() or 4)))
+
+# Optimize CPU threads for llama.cpp (avoid hyperthread contention on modern CPUs)
+_cpu_cnt = os.cpu_count() or 4
+_default_threads = min(8, max(1, _cpu_cnt // 2 if _cpu_cnt > 4 else _cpu_cnt))
+MODEL_THREADS = int(os.getenv("MODEL_THREADS", str(_default_threads)))
 
 # --- Embeddings ---
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")

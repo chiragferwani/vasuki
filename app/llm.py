@@ -94,6 +94,7 @@ class VasukiLLM:
                 temperature=MODEL_TEMPERATURE,
                 top_p=0.9,
                 repeat_penalty=1.1,
+                stop=["<|im_end|>", "<|endoftext|>", "<|im_start|>"],
             )
 
             content = response["choices"][0]["message"]["content"]
@@ -125,6 +126,7 @@ class VasukiLLM:
                 temperature=MODEL_TEMPERATURE,
                 top_p=0.9,
                 repeat_penalty=1.1,
+                stop=["<|im_end|>", "<|endoftext|>", "<|im_start|>"],
                 stream=True,
             )
 
