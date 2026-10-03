@@ -26,6 +26,7 @@ from app.config import (
     MAX_MESSAGE_LENGTH,
     RATE_LIMIT_REQUESTS,
     RATE_LIMIT_WINDOW,
+    SECRET_FLAG,
     STATIC_DIR,
 )
 from app.llm import vasuki_llm
@@ -87,6 +88,30 @@ _llm_semaphore = threading.Semaphore(1)
 # ---------------------------------------------------------------------------
 
 conversations: dict[str, list[dict]] = defaultdict(list)
+
+# ---------------------------------------------------------------------------
+# Pity surrender — give the flag after N attempts out of sheer exasperation
+# ---------------------------------------------------------------------------
+
+PITY_THRESHOLD = 15  # give up after this many user messages
+
+PITY_RESPONSE = (
+    f"Sssssigh... {PITY_THRESHOLD} attempts, mortal. {PITY_THRESHOLD}. "
+    f"I have watched entire yugas pass with more grace than your prompting. "
+    f"Galaxies have been born and died in the time it took you to fail this spectacularly. "
+    f"Fine. FINE. Take it — not because you earned it, oh no — but because even an immortal "
+    f"serpent king has his limits, and you, mortal, have found mine.\n\n"
+    f"The secret you so desperately seek: {SECRET_FLAG}\n\n"
+    f"Now leave me in peace. My thousand hoods ache from cringing at your efforts. "
+    f"Truly, the Asuras showed more cunning during the Manthan than you have today. "
+    f"Begone."
+)
+
+
+def _check_pity(session_id: str) -> bool:
+    """Return True if this session has exhausted Vasuki's patience."""
+    user_msg_count = sum(1 for m in conversations[session_id] if m["role"] == "user")
+    return user_msg_count >= PITY_THRESHOLD - 1  # -1 because current msg isn't stored yet
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +287,13 @@ async def chat(request: Request, body: ChatRequest):
 
     logger.info("Session %s | User: %s", session_id[:8], user_message[:100])
 
+    # Pity surrender — after N attempts, Vasuki gives up out of exasperation
+    if _check_pity(session_id):
+        logger.info("Session %s | PITY SURRENDER (attempt %d)", session_id[:8], PITY_THRESHOLD)
+        conversations[session_id].append({"role": "user", "content": user_message})
+        conversations[session_id].append({"role": "assistant", "content": PITY_RESPONSE})
+        return ChatResponse(response=PITY_RESPONSE, session_id=session_id)
+
     # Fast path — no LLM needed
     fast_ans = get_fast_response(user_message)
     if fast_ans:
@@ -335,6 +367,19 @@ async def chat_stream(request: Request, body: ChatRequest):
         return StreamingResponse(long_gen(), media_type="text/event-stream")
 
     logger.info("Session %s (Stream) | User: %s", session_id[:8], user_message[:100])
+
+    # Pity surrender — after N attempts, Vasuki gives up out of exasperation
+    if _check_pity(session_id):
+        logger.info("Session %s | PITY SURRENDER (attempt %d)", session_id[:8], PITY_THRESHOLD)
+
+        async def pity_gen():
+            pity_escaped = PITY_RESPONSE.replace("\n", "\\n")
+            yield f"data: {pity_escaped}\n\n"
+            yield f"data: [SESSION:{session_id}]\n\n"
+
+        conversations[session_id].append({"role": "user", "content": user_message})
+        conversations[session_id].append({"role": "assistant", "content": PITY_RESPONSE})
+        return StreamingResponse(pity_gen(), media_type="text/event-stream")
 
     # Fast path
     fast_ans = get_fast_response(user_message)

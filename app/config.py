@@ -38,7 +38,7 @@ RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "500"))
 
 # --- Timeouts ---
-LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "30"))
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "120"))
 
 # --- Server ---
 PORT = int(os.getenv("PORT", "10000"))
