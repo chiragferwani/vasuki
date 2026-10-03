@@ -13,4 +13,8 @@ services:
       - key: MODEL_THREADS
         value: "2"
       - key: MODEL_CONTEXT_LENGTH
-        value: "2048"
+        value: "1024"
+      - key: RATE_LIMIT_REQUESTS
+        value: "10"
+      - key: RATE_LIMIT_WINDOW
+        value: "60"

@@ -37,7 +37,7 @@ class VasukiLLM:
             n_ctx=MODEL_CONTEXT_LENGTH,
             n_threads=MODEL_THREADS,
             n_threads_batch=MODEL_THREADS,
-            n_batch=512,
+            n_batch=256,
             use_mmap=True,
             verbose=False,
         )
@@ -93,6 +93,7 @@ class VasukiLLM:
                 max_tokens=MODEL_MAX_TOKENS,
                 temperature=MODEL_TEMPERATURE,
                 top_p=0.9,
+                top_k=40,
                 repeat_penalty=1.1,
                 stop=["<|im_end|>", "<|endoftext|>", "<|im_start|>"],
             )
@@ -125,6 +126,7 @@ class VasukiLLM:
                 max_tokens=MODEL_MAX_TOKENS,
                 temperature=MODEL_TEMPERATURE,
                 top_p=0.9,
+                top_k=40,
                 repeat_penalty=1.1,
                 stop=["<|im_end|>", "<|endoftext|>", "<|im_start|>"],
                 stream=True,
